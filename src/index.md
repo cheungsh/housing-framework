@@ -7,7 +7,8 @@ toc: false
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap');
 </style>
 
-<div class="hero">
+<div class="page-grid">
+<div class="hero layout-hero">
   <h1>Where Can I Realistically Afford To Live</h1>
   <h3>Explore global housing affordability with interactive visualizations. Compare countries by house prices, rent, mortgage rates, and see where your budget can realistically get you a home.</h3>
 </div>
@@ -156,7 +157,7 @@ function priceChoropleth(unitData, countries, maxPrice, minBedrooms, {width} = {
 }
 ```
 
-<div class="grid grid-cols-1">
+<div class="layout-map">
   <div class="card">
     <h2>Countries That Fits Requirements</h2>
     <div class="grid grid-cols-2 controls-row">
@@ -246,7 +247,7 @@ function affordabilityBar(data, year, {width} = {}) {
 }
 ```
 
-<div class="grid grid-cols-1">
+<div class="layout-affordability">
   <div class="card">
     <h2>Affordability by Country</h2>
     <div class="card year-card">
@@ -273,7 +274,7 @@ function housePriceTrend(data, {width} = {}) {
 }
 ```
 
-<div class="grid grid-cols-1"> 
+<div class="layout-hpi"> 
   <div class="card">
     <h2>House Price Index Over Time</h2>
     ${resize(width => housePriceTrend(housingData, {width}))}
@@ -309,7 +310,7 @@ function mortgageScatter(data, {width} = {}) {
 }
 ```
 
-<div class="grid grid-cols-1"> 
+<div class="layout-mortgage"> 
   <div class="card"> 
     <h2>Mortgage Rate vs Housing Affordability</h2>
     ${resize(width => mortgageScatter(housingData, {width}))} 
@@ -388,11 +389,12 @@ function affordabilityTreemap(data, year, {width} = {}) {
 }
 ```
 
-<div class="grid grid-cols-1">
+<div class="layout-inflation">
   <div class="card"> 
     <h2>Inflation's Impact on Housing Affordability</h2>
     ${resize(width => affordabilityTreemap(housingData, yearInput, {width}))}
   </div>
+</div>
 </div>
 
 
@@ -415,13 +417,61 @@ function affordabilityTreemap(data, year, {width} = {}) {
   margin: 1rem 0;
   padding: 1rem 0;
   max-width: none;
-  font-size: 80px;
+  font-size: 64px;
   font-weight: 900;
   line-height: 1;
   background: #000;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.layout-hero {
+  grid-column: 1 / span 5;
+  grid-row: 1;
+}
+
+.layout-affordability {
+  grid-column: 6 / span 7;
+  grid-row: 1;
+}
+
+.layout-map {
+  grid-column: 1 / span 7;
+  grid-row: 2;
+}
+
+.layout-inflation {
+  grid-column: 8 / span 5;
+  grid-row: 2;
+}
+
+.layout-hpi {
+  grid-column: 1 / span 6;
+  grid-row: 3;
+}
+
+.layout-mortgage {
+  grid-column: 7 / span 6;
+  grid-row: 3;
+}
+
+@media (max-width: 1100px) {
+  .page-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-grid > * {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
 }
 
 
