@@ -24,7 +24,8 @@ const housingData = housingRaw.map((d) => ({
   house_price_index: +d["House Price Index"],
   rent_index: +d["Rent Index"],
   affordability_ratio: +d["Affordability Ratio"],
-  mortgage_rate: +d["Mortgage Rate (%)"]
+  mortgage_rate: +d["Mortgage Rate (%)"],
+  inflation_rate: +d["Inflation Rate (%)"]
 }));
 
 const countryDomain = Array.from(new Set(housingData.map((d) => d.country))).sort(d3.ascending);
@@ -77,9 +78,9 @@ const world = await FileAttachment("data/countries-110m.json").json();
 const countries = topojson.feature(world, world.objects.countries);
 
 const mapBudgetInput = (() => {
-  const el = Inputs.range([30000, 13000000], {
-    value: 10000,
-    step: 10000
+  const el = Inputs.range([0, 20000000], {
+    value: 1000,
+    step: 1000
   });
   el.classList.add("slider-control", "budget-control");
   el.querySelector('input[type="range"]')?.classList.add("slider");
@@ -123,30 +124,42 @@ const mapBedroomsInput = (() => {
 const mapBedrooms = view(mapBedroomsInput);
 
 // Build the choropleth
-function priceChoropleth(unitData, countries, maxPrice, minBedrooms, {width} = {}) {
+function priceChoropleth(unitData, countries, budget, minBedrooms, {width} = {}) {
   const countryPrice = d3.rollup(
-    unitData.filter((d) => d.price <= maxPrice && d.bedrooms >= minBedrooms),
+    unitData.filter((d) => d.bedrooms >= minBedrooms),
     (v) => d3.mean(v, (d) => d.price),
     (d) => d.country
   );
+
+  const affordabilityScore = (name) => {
+    const price = countryPrice.get(name);
+    if (!Number.isFinite(price) || price <= 0) return null;
+    return budget / price;
+  };
+
+  const colorScale = d3
+    .scaleLinear()
+    .domain([0.5, 1.0, 1.5])
+    .range(["#b46b68", "#ddc56f", "#8eaf76"])
+    .clamp(true);
 
   return Plot.plot({
     projection: "equal-earth",
     width,
     height: width / 2,
-    color: {
-      legend: true,
-      position: 'bottom',
-      type: "sequential",
-      range: ["#8eaf76","#ddc56f", "#d7a76e", "#b46b68"],
-      unknown: "#eee",
-      domain: [30000, d3.max(Array.from(countryPrice.values()))]
-    },
     marks: [
       Plot.geo(countries, {
-        fill: (d) => countryPrice.get(d.properties.name),
-        title: (d) =>
-          `${d.properties.name}\n$${countryPrice.get(d.properties.name)?.toLocaleString() ?? "No data"}`
+        fill: (d) => {
+          const score = affordabilityScore(d.properties.name);
+          return score == null ? "#eee" : colorScale(score);
+        },
+        title: (d) => {
+          const name = d.properties.name;
+          const price = countryPrice.get(name);
+          const score = affordabilityScore(name);
+          if (!Number.isFinite(price)) return `${name}\nNo data`;
+          return `${name}\nAvg price: $${price.toLocaleString()}\nAffordability: ${d3.format(".2f")(score)}`;
+        }
       }),
       Plot.geo(topojson.mesh(world, world.objects.countries, (a, b) => a !== b), {
         stroke: "white",
@@ -171,6 +184,14 @@ function priceChoropleth(unitData, countries, maxPrice, minBedrooms, {width} = {
       </div>
     </div>
     ${resize(width => priceChoropleth(unitData, countries, mapBudget, mapBedrooms, {width}))}
+    <div class="map-legend">
+      <div class="map-legend-bar"></div>
+      <div class="map-legend-labels">
+        <span>Unaffordable</span>
+        <span>Somewhat Affordable</span>
+        <span>Affordable</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -190,14 +211,18 @@ const yearInputEl = (() => {
   const label = document.createElement("label");
   root.appendChild(label);
 
+  const track = document.createElement("div");
+  track.className = "year-track";
+  root.appendChild(track);
+
   const range = document.createElement("input");
   range.type = "range";
   range.min = String(minYear);
   range.max = String(maxYear);
-  range.step = "1";
   range.value = String(maxYear);
   range.className = "slider";
-  root.appendChild(range);
+  track.appendChild(range);
+  
 
   const ticks = document.createElement("div");
   ticks.className = "year-ticks";
@@ -208,7 +233,7 @@ const yearInputEl = (() => {
     t.textContent = String(y);
     ticks.appendChild(t);
   });
-  root.appendChild(ticks);
+  track.appendChild(ticks);
 
   function syncValue(v) {
     const next = Math.min(maxYear, Math.max(minYear, Math.round(+v || maxYear)));
@@ -263,8 +288,7 @@ function affordabilityBar(data, year, {width} = {}) {
 function housePriceTrend(data, {width} = {}) {
   return Plot.plot({
     width,
-    height: 300,
-    y: {grid: true, label: "House Price Index", domain: [80, 180]},
+    y: {grid: true, label: "House Price Index", domain: [70, 190]},
     x: {label: "Year", tickFormat: d3.format("d")},
     color: {type: "categorical", legend: true, domain: countryDomain, range: countryColours},
     marks: [
@@ -286,9 +310,8 @@ function housePriceTrend(data, {width} = {}) {
 function mortgageScatter(data, {width} = {}) {
   return Plot.plot({
     width,
-    height: 300,
     x: {label: "Mortgage Rate (%)"},
-    y: {label: "Affordability Ratio", grid: true},
+    y: {label: "Affordability Ratio", grid: true, domain: [2, 13]},
     color: {type: "categorical", legend: true, domain: countryDomain, range: countryColours},
     marks: [
       Plot.dot(data, {
@@ -319,80 +342,173 @@ function mortgageScatter(data, {width} = {}) {
 
 <!-- Inflation Rates x Affordability (Treemap) -->
 ```js
-function affordabilityTreemap(data, year, {width} = {}) {
-  const height = width;
-  const format = d3.format(",.2f");
-  const filtered = data.filter(
-    (d) =>
-      d.year === year &&
-      Number.isFinite(d.affordability_ratio) &&
-      String(d.country ?? "").trim() !== ""
-  );
 
-  const root = d3
-    .treemap()
-    .tile(d3.treemapSquarify)
-    .size([width, height])
-    .padding(1)
-    .round(true)(
-      d3
-        .hierarchy({children: filtered.map((d) => ({name: d.country, value: d.affordability_ratio}))})
-        .sum((d) => d.value)
-        .sort((a, b) => b.value - a.value)
-    );
+const inflationTreemapData = (data, year) => ({
+  name: "root",
+  children: data
+    .filter((d) => d.year === year && Number.isFinite(d.inflation_rate))
+    .map((d) => ({
+      country: d.country,
+      inflation_rate: d.inflation_rate
+    }))
+});
 
-  const color = d3.scaleOrdinal(countryDomain, countryColours);
+const formatInflation = d3.format(".1f");
 
-  const svg = d3
-    .create("svg")
-    .attr("viewBox", [0, 0, width, height])
-    .attr("width", width)
-    .attr("height", height)
-    .attr("style", "max-width: 100%; height: auto; font: 10px sans-serif;");
+function affordabilityTreemap(data, { // data is either tabular (array of objects) or hierarchy (nested objects)
+  path,
+  id = Array.isArray(data) ? d => d.id : null, // if tabular data, given a d in data, returns a unique identifier (string)
+  parentId = Array.isArray(data) ? d => d.parentId : null, // if tabular data, given a node d, returns its parent’s identifier
+  children, // if hierarchical data, given a d in data, returns its children
+  value, // given a node d, returns a quantitative value (for area encoding; null for count)
+  sort = (a, b) => d3.descending(a.value, b.value), // how to sort nodes prior to layout
+  label, // given a leaf node d, returns the name to display on the rectangle
+  group, // given a leaf node d, returns a categorical value (for color encoding)
+  title, // given a leaf node d, returns its hover text
+  link, // given a leaf node d, its link (if any)
+  linkTarget = "_blank", // the target attribute for links (if any)
+  tile = d3.treemapBinary, // treemap strategy
+  width = 640, // outer width, in pixels
+  height = 593, // outer height, in pixels
+  margin = 0, // shorthand for margins
+  marginTop = margin, // top margin, in pixels
+  marginRight = margin, // right margin, in pixels
+  marginBottom = margin, // bottom margin, in pixels
+  marginLeft = margin, // left margin, in pixels
+  padding = 1, // shorthand for inner and outer padding
+  paddingInner = padding, // to separate a node from its adjacent siblings
+  paddingOuter = padding, // shorthand for top, right, bottom, and left padding
+  paddingTop = paddingOuter, // to separate a node’s top edge from its children
+  paddingRight = paddingOuter, // to separate a node’s right edge from its children
+  paddingBottom = paddingOuter, // to separate a node’s bottom edge from its children
+  paddingLeft = paddingOuter, // to separate a node’s left edge from its children
+  round = true, // whether to round to exact pixels
+  colors = d3.schemeTableau10, // array of colors
+  zDomain, // array of values for the color scale
+  fill = "#ccc", // fill for node rects (if no group color encoding)
+  fillOpacity = group == null ? null : 0.6, // fill opacity for node rects
+  stroke, // stroke for node rects
+  strokeWidth, // stroke width for node rects
+  strokeOpacity, // stroke opacity for node rects
+  strokeLinejoin, // stroke line join for node rects
+} = {}) {
 
-  const leaf = svg
-    .selectAll("g")
-    .data(root.leaves())
-    .join("g")
-    .attr("transform", (d) => `translate(${d.x0},${d.y0})`);
+  // If id and parentId options are specified, or the path option, use d3.stratify
+  // to convert tabular data to a hierarchy; otherwise we assume that the data is
+  // specified as an object {children} with nested objects (a.k.a. the “flare.json”
+  // format), and use d3.hierarchy.
 
-  leaf
-    .append("title")
-    .text((d) => `${d.data.name}\n${format(d.value)}`);
+  // We take special care of any node that has both a value and children, see
+  // https://observablehq.com/@d3/treemap-parent-with-value.
+  const stratify = data => (d3.stratify().path(path)(data)).each(node => {
+    if (node.children?.length && node.data != null) {
+      const child = new d3.Node(node.data);
+      node.data = null;
+      child.depth = node.depth + 1;
+      child.height = 0;
+      child.parent = node;
+      child.id = node.id + "/";
+      node.children.unshift(child);
+    }
+  });
+  const root = path != null ? stratify(data)
+      : id != null || parentId != null ? d3.stratify().id(id).parentId(parentId)(data)
+      : d3.hierarchy(data, children);
 
-  leaf
-    .append("rect")
-    .attr("id", (d, i) => `leaf-${i}`)
-    .attr("fill", (d) => color(d.data.name))
-    .attr("fill-opacity", 0.7)
-    .attr("width", (d) => d.x1 - d.x0)
-    .attr("height", (d) => d.y1 - d.y0);
+  // Compute the values of internal nodes by aggregating from the leaves.
+  value == null ? root.count() : root.sum(d => Math.max(0, d ? value(d) : null));
 
-  leaf
-    .append("clipPath")
-    .attr("id", (d, i) => `clip-${i}`)
-    .append("use")
-    .attr("xlink:href", (d, i) => `#leaf-${i}`);
+  // Prior to sorting, if a group channel is specified, construct an ordinal color scale.
+  const leaves = root.leaves();
+  const G = group == null ? null : leaves.map(d => group(d.data, d));
+  if (zDomain === undefined) zDomain = G;
+  zDomain = new d3.InternSet(zDomain);
+  const color = group == null ? null : d3.scaleOrdinal(zDomain, colors);
 
-  leaf
-    .append("text")
-    .attr("clip-path", (d, i) => `url(#clip-${i})`)
-    .selectAll("tspan")
-    .data((d) => d.data.name.split(/\s+/g).concat(format(d.value)))
-    .join("tspan")
-    .attr("x", 3)
-    .attr("y", (d, i, nodes) => `${(i === nodes.length - 1) * 0.3 + 1.1 + i * 0.9}em`)
-    .attr("fill-opacity", (d, i, nodes) => (i === nodes.length - 1 ? 0.7 : null))
-    .text((d) => d);
+  // Compute labels and titles.
+  const L = label == null ? null : leaves.map(d => label(d.data, d));
+  const T = title === undefined ? L : title == null ? null : leaves.map(d => title(d.data, d));
 
-  return svg.node();
+  // Sort the leaves (typically by descending value for a pleasing layout).
+  if (sort != null) root.sort(sort);
+
+  // Compute the treemap layout.
+  d3.treemap()
+      .tile(tile)
+      .size([width - marginLeft - marginRight, height - marginTop - marginBottom])
+      .paddingInner(paddingInner)
+      .paddingTop(paddingTop)
+      .paddingRight(paddingRight)
+      .paddingBottom(paddingBottom)
+      .paddingLeft(paddingLeft)
+      .round(round)
+    (root);
+
+  const svg = d3.create("svg")
+      .attr("viewBox", [-marginLeft, -marginTop, width, height])
+      .attr("width", width)
+      .attr("height", height)
+      .attr("style", "max-width: 100%; height: auto; height: intrinsic;")
+      .attr("font-family", "Lato")
+      .attr("font-size", 10);
+
+  const node = svg.selectAll("a")
+    .data(leaves)
+    .join("a")
+      .attr("xlink:href", link == null ? null : (d, i) => link(d.data, d))
+      .attr("target", link == null ? null : linkTarget)
+      .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+  node.append("rect")
+      .attr("fill", color ? (d, i) => color(G[i]) : fill)
+      .attr("fill-opacity", fillOpacity)
+      .attr("stroke", stroke)
+      .attr("stroke-width", strokeWidth)
+      .attr("stroke-opacity", strokeOpacity)
+      .attr("stroke-linejoin", strokeLinejoin)
+      .attr("width", d => d.x1 - d.x0)
+      .attr("height", d => d.y1 - d.y0);
+
+  if (T) {
+    node.append("title").text((d, i) => T[i]);
+  }
+
+  if (L) {
+    // A unique identifier for clip paths (to avoid conflicts).
+    const uid = `O-${Math.random().toString(16).slice(2)}`;
+
+    node.append("clipPath")
+       .attr("id", (d, i) => `${uid}-clip-${i}`)
+     .append("rect")
+       .attr("width", d => d.x1 - d.x0)
+       .attr("height", d => d.y1 - d.y0);
+
+    node.append("text")
+        .attr("clip-path", (d, i) => `url(${new URL(`#${uid}-clip-${i}`, location)})`)
+      .selectAll("tspan")
+      .data((d, i) => `${L[i]}`.split(/\n/g))
+      .join("tspan")
+        .attr("x", 3)
+        .attr("y", (d, i, D) => `${(i === D.length - 1) * 0.3 + 1.1 + i * 0.9}em`)
+        .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
+        .text(d => d);   
+  }
+
+  return Object.assign(svg.node(), {scales: {color}});
 }
 ```
 
 <div class="layout-inflation">
   <div class="card"> 
     <h2>Inflation's Impact on Housing Affordability</h2>
-    ${resize(width => affordabilityTreemap(housingData, yearInput, {width}))}
+    ${resize(width => affordabilityTreemap(inflationTreemapData(housingData, yearInput), {
+      children: (d) => d.children,
+      value: (d) => d.inflation_rate,
+      label: (d) => `${d.country}\n${formatInflation(d.inflation_rate)}%`,
+      group: (d) => d.country,
+      title: (d) => `${d.country}\nInflation Rate: ${formatInflation(d.inflation_rate)}%`,
+      width
+    }))}
   </div>
 </div>
 </div>
@@ -474,7 +590,6 @@ function affordabilityTreemap(data, year, {width} = {}) {
   }
 }
 
-
 .button-group {
   display: grid;
   gap: 0.5rem;
@@ -530,6 +645,17 @@ label {
   --thumb-size: 25px;
 }
 
+.year-track {
+  width: 100%;
+  padding-left: calc(var(--thumb-size, 25px) / 2);
+  padding-right: calc(var(--thumb-size, 25px) / 2);
+  box-sizing: border-box;
+}
+
+.year-track input[type="range"] {
+  width: 100%;
+}
+
 .slider-control input[type="number"] {
   order: 1;
   border: 1px solid #000;
@@ -538,12 +664,11 @@ label {
   color: #000;
   padding: 0.35rem 0.8rem;
   cursor: pointer;
-
 }
 
 .slider-control input[type="range"] {
   width: 100%;
-  margin-top: 0.6rem;
+  margin-top: 0.8rem;
   order: 2;
 }
 
@@ -566,13 +691,33 @@ label {
   width: 90%;
 }
 
-.year-ticks {
-  display: grid;
-  margin-top: 0.4rem;
+.map-legend {
+  margin-top: 0.8rem;
+}
+
+.map-legend-bar {
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #b46b68, #ddc56f, #8eaf76);
+  border: 1px solid #000;
+}
+
+.map-legend-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  margin-top: 0.35rem;
+  color: #000;
+  font-family: "Lato";
+}
+
+.year-track .year-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.6rem;
   font-size: 0.75rem;
   color: #000;
-  justify-items: center;
-  padding: 0 calc(var(--thumb-size, 25px) / 2);
+  width: 100%;
 }
 
 .slider {
