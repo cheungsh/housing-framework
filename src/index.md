@@ -4,24 +4,12 @@ title: Global Housing Dashboard
 toc: false
 ---
 <style>
-@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Lato:wght@300;400;600;700&display=swap");
-
-:root {
-  font-family: "Lato", var(--sans-serif);
-}
-
-h1,
-h2,
-h3 {
-  font-family: "DM Serif Display", var(--sans-serif);
-  letter-spacing: 0.2px;
-}
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap');
 </style>
 
 <div class="hero">
   <h1>Where Can I Realistically Afford To Live</h1>
-  <h2>description</h2>
+  <h3>Explore global housing affordability with interactive visualizations. Compare countries by house prices, rent, mortgage rates, and see where your budget can realistically get you a home.</h3>
 </div>
 
 <!-- Load and transform the data -->
@@ -81,7 +69,6 @@ const unitData = unitRaw
 <!-- Unit Size/Bedroom x Price (Map Chart) -->
 ```js
 import * as topojson from "topojson-client";
-import * as Inputs from "@observablehq/inputs";
 
 // Load world map TopoJSON
 const world = await FileAttachment("data/countries-110m.json").json();
@@ -90,10 +77,9 @@ const countries = topojson.feature(world, world.objects.countries);
 const mapBudgetInput = (() => {
   const el = Inputs.range([30000, 13000000], {
     value: 10000,
-    step: 10000,
-    label: "Housing Budget (USD)"
+    step: 10000
   });
-  el.classList.add("slider-control");
+  el.classList.add("slider-control", "budget-control");
   el.querySelector('input[type="range"]')?.classList.add("slider");
   el.querySelector('input[type="number"]')?.classList.add("slider-number");
   return el;
@@ -107,7 +93,6 @@ const mapBedroomsInput = (() => {
 
   const label = document.createElement("div");
   label.className = "button-group-label";
-  label.textContent = "Amount of Bedrooms";
   root.appendChild(label);
 
   const buttons = [1, 2, 3].map((n) => {
@@ -152,7 +137,6 @@ function priceChoropleth(unitData, countries, maxPrice, minBedrooms, {width} = {
       type: "sequential",
       range: ["#8eaf76","#ddc56f", "#d7a76e", "#b46b68"],
       unknown: "#eee",
-      label: "Countries That Fits Requirements",
       domain: [30000, d3.max(Array.from(countryPrice.values()))]
     },
     marks: [
@@ -170,8 +154,26 @@ function priceChoropleth(unitData, countries, maxPrice, minBedrooms, {width} = {
 }
 ```
 
+<div class="grid grid-cols-2 controls-row">
+  <div class="card">
+    <h2>Housing Budget (USD)</h2>
+    ${mapBudgetInput}
+  </div>
+  <div class="card">
+    <h2>Amount of Bedrooms</h2>
+    ${mapBedroomsInput}
+  </div>
+</div>
+<div class="grid grid-cols-1">
+  <div class="card">
+    <h2>Countries That Fits Requirements</h2>
+    ${resize(width => priceChoropleth(unitData, countries, mapBudget, mapBedrooms, {width}))}
+  </div>
+</div>
+
 <!-- Affordability x Year x Country (Input + Bar Chart) -->
 ```js
+import {Generators} from "@observablehq/runtime";
 
 const yearInputEl = (() => {
   const years = Array.from(new Set(housingData.map((d) => d.year))).sort(d3.ascending);
@@ -183,7 +185,6 @@ const yearInputEl = (() => {
   root.value = maxYear;
 
   const label = document.createElement("label");
-  label.textContent = "Year";
   root.appendChild(label);
 
   const range = document.createElement("input");
@@ -222,7 +223,6 @@ const yearInput = view(yearInputEl);
 function affordabilityBar(data, year, {width} = {}) {
   const filtered = data.filter(d => d.year === year);
   return Plot.plot({
-    title: `Affordability by Country (${year})`,
     width,
     height: 500,
     y: {label: null, axis: null, domain: filtered.map((d) => d.country)},
@@ -245,18 +245,23 @@ function affordabilityBar(data, year, {width} = {}) {
 ```
 
 <div class="grid grid-cols-1">
-  <div class="card">${yearInputEl}</div>
+  <div class="card">
+    <h2>Year</h2>
+    ${yearInputEl}
+  </div>
 </div>
 
 <div class="grid grid-cols-1">
-  <div class="card"> ${resize(width => affordabilityBar(housingData, yearInput, {width}))} </div>
+  <div class="card">
+    <h2>Affordability by Country</h2>
+    ${resize(width => affordabilityBar(housingData, yearInput, {width}))} 
+    </div>
 </div>
 
 <!-- House Price Index x Year x Country (Line Chart) -->
 ```js
 function housePriceTrend(data, {width} = {}) {
   return Plot.plot({
-    title: "House Price Index Over Time",
     width,
     height: 300,
     y: {grid: true, label: "House Price Index", domain: [80, 180]},
@@ -270,14 +275,16 @@ function housePriceTrend(data, {width} = {}) {
 ```
 
 <div class="grid grid-cols-1"> 
-  <div class="card"> ${resize(width => housePriceTrend(housingData, {width}))} </div> 
+  <div class="card">
+    <h2>House Price Index Over Time</h2>
+    ${resize(width => housePriceTrend(housingData, {width}))}
+  </div> 
 </div>
 
 <!-- Mortgage Rate x Affordability (Scatter Chart) -->
 ```js
 function mortgageScatter(data, {width} = {}) {
   return Plot.plot({
-    title: "Mortgage Rate vs Affordability",
     width,
     height: 300,
     x: {label: "Mortgage Rate (%)"},
@@ -304,7 +311,10 @@ function mortgageScatter(data, {width} = {}) {
 ```
 
 <div class="grid grid-cols-1"> 
-  <div class="card"> ${resize(width => mortgageScatter(housingData, {width}))} </div>
+  <div class="card"> 
+    <h2>Mortgage Rate vs Housing Affordability</h2>
+    ${resize(width => mortgageScatter(housingData, {width}))} 
+  </div>
 </div>
 
 <!-- Inflation Rates x Affordability (Treemap) -->
@@ -380,21 +390,15 @@ function affordabilityTreemap(data, year, {width} = {}) {
 ```
 
 <div class="grid grid-cols-1">
-  <div class="card"> ${resize(width => affordabilityTreemap(housingData, yearInput, {width}))} </div>
-</div>
-
-<div class="grid grid-cols-2 controls-row">
-  <div class="card">${mapBudgetInput}</div>
-  <div class="card">${mapBedroomsInput}</div>
-</div>
-<div class="grid grid-cols-1">
-  <div class="card">${resize(width => priceChoropleth(unitData, countries, mapBudget, mapBedrooms, {width}))}</div>
+  <div class="card"> 
+    <h2>Inflation's Impact on Housing Affordability</h2>
+    ${resize(width => affordabilityTreemap(housingData, yearInput, {width}))}
+  </div>
 </div>
 
 
 <!-- CSS -->
 <style>
-
 .hero {
   display: flex;
   flex-direction: column;
@@ -406,10 +410,13 @@ function affordabilityTreemap(data, year, {width} = {}) {
 }
 
 .hero h1 {
+  font-family: "DM Serif Display";
+  letter-spacing: 0.2px;
+  font-style: normal;
   margin: 1rem 0;
   padding: 1rem 0;
   max-width: none;
-  font-size: 14vw;
+  font-size: 80px;
   font-weight: 900;
   line-height: 1;
   background: #000;
@@ -425,7 +432,12 @@ function affordabilityTreemap(data, year, {width} = {}) {
 }
 
 .button-group-label {
+  font-family: "Lato";
   font-weight: 600;
+}
+
+label {
+  font-family: "Lato";
 }
 
 .button-group-btn {
@@ -464,21 +476,44 @@ function affordabilityTreemap(data, year, {width} = {}) {
   gap: 0.8rem;
 }
 
-.slider-control label {
-  margin-bottom: 0.2rem;
+.year-control {
+  --thumb-size: 25px;
+}
+
+.slider-control input[type="number"] {
+  order: 1;
 }
 
 .slider-control input[type="range"] {
   width: 100%;
   margin-top: 0.6rem;
+  order: 2;
+}
+
+.budget-control {
+  display: flex;
+  flex-direction: column;
+}
+
+.budget-control label {
+  order: 1;
+}
+
+.budget-control input[type="number"] {
+  order: 2;
+}
+
+.budget-control input[type="range"] {
+  order: 3;
 }
 
 .year-ticks {
   display: grid;
-  gap: 2rem;
   margin-top: 0.4rem;
   font-size: 0.75rem;
   color: #000;
+  justify-items: center;
+  padding: 0 calc(var(--thumb-size, 25px) / 2);
 }
 
 .slider {
@@ -511,7 +546,10 @@ function affordabilityTreemap(data, year, {width} = {}) {
   cursor: pointer;
 }
 
-.hero h2 {
+h3 {
+  font-family: "Lato";
+  letter-spacing: 0.2px;
+  font-style: normal;
   margin: 0;
   max-width: 34em;
   font-size: 20px;
@@ -520,10 +558,16 @@ function affordabilityTreemap(data, year, {width} = {}) {
   color: #000;
 }
 
-@media (min-width: 640px) {
-  .hero h1 {
-    font-size: 90px;
-  }
+h2 {
+  font-family: "DM Serif Display";
+  letter-spacing: 0.2px;
+  font-style: normal;
+  margin: 0;
+  margin-bottom: 10px;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #000;
 }
 
 </style>
