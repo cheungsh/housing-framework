@@ -69,6 +69,7 @@ const unitData = unitRaw
 <!-- Unit Size/Bedroom x Price (Map Chart) -->
 ```js
 import * as topojson from "topojson-client";
+import * as Inputs from "@observablehq/inputs";
 
 // Load world map TopoJSON
 const world = await FileAttachment("data/countries-110m.json").json();
@@ -134,6 +135,7 @@ function priceChoropleth(unitData, countries, maxPrice, minBedrooms, {width} = {
     height: width / 2,
     color: {
       legend: true,
+      position: 'bottom',
       type: "sequential",
       range: ["#8eaf76","#ddc56f", "#d7a76e", "#b46b68"],
       unknown: "#eee",
@@ -154,19 +156,19 @@ function priceChoropleth(unitData, countries, maxPrice, minBedrooms, {width} = {
 }
 ```
 
-<div class="grid grid-cols-2 controls-row">
-  <div class="card">
-    <h2>Housing Budget (USD)</h2>
-    ${mapBudgetInput}
-  </div>
-  <div class="card">
-    <h2>Amount of Bedrooms</h2>
-    ${mapBedroomsInput}
-  </div>
-</div>
 <div class="grid grid-cols-1">
   <div class="card">
     <h2>Countries That Fits Requirements</h2>
+    <div class="grid grid-cols-2 controls-row">
+      <div class="card">
+        <h2>Housing Budget (USD)</h2>
+        ${mapBudgetInput}
+      </div>
+      <div class="card">
+        <h2>Amount of Bedrooms</h2>
+        ${mapBedroomsInput}
+      </div>
+    </div>
     ${resize(width => priceChoropleth(unitData, countries, mapBudget, mapBedrooms, {width}))}
   </div>
 </div>
@@ -227,7 +229,7 @@ function affordabilityBar(data, year, {width} = {}) {
     height: 500,
     y: {label: null, axis: null, domain: filtered.map((d) => d.country)},
     x: {grid: true, label: "Affordability Ratio"},
-    color: {type: "categorical", legend: true, domain: countryDomain, range: countryColours},
+    color: {type: "categorical", legend: false, domain: countryDomain, range: countryColours},
     marks: [
       Plot.barX(filtered, {x: "affordability_ratio", y: "country", fill: "country", tip: true}),
       Plot.text(filtered, {
@@ -246,14 +248,11 @@ function affordabilityBar(data, year, {width} = {}) {
 
 <div class="grid grid-cols-1">
   <div class="card">
-    <h2>Year</h2>
-    ${yearInputEl}
-  </div>
-</div>
-
-<div class="grid grid-cols-1">
-  <div class="card">
     <h2>Affordability by Country</h2>
+    <div class="card year-card">
+      <h2>Year</h2>
+      ${yearInputEl}
+    </div>
     ${resize(width => affordabilityBar(housingData, yearInput, {width}))} 
     </div>
 </div>
@@ -458,12 +457,13 @@ label {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .controls-row .card {
   display: flex;
   align-items: stretch;
+  height: auto;
 }
 
 .controls-row .card > * {
@@ -482,6 +482,13 @@ label {
 
 .slider-control input[type="number"] {
   order: 1;
+  border: 1px solid #000;
+  border-radius: 100px;
+  background: transparent;
+  color: #000;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+
 }
 
 .slider-control input[type="range"] {
@@ -501,10 +508,12 @@ label {
 
 .budget-control input[type="number"] {
   order: 2;
+  width: 80%;
 }
 
 .budget-control input[type="range"] {
   order: 3;
+  width: 90%;
 }
 
 .year-ticks {
@@ -569,5 +578,6 @@ h2 {
   line-height: 1.5;
   color: #000;
 }
+
 
 </style>
